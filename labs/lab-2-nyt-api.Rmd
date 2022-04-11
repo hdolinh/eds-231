@@ -1,0 +1,128 @@
+---
+title: 'Lab 1: Text Data in R'
+author: "Halina Do-Linh"
+date: "4/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+librarian::shelf(
+  here,
+  jsonlite, # convert API results queries to R-friendly formats
+  tidyverse,
+  tidytext, # text data management and analysis
+  ggplot2 # plot word frequencies and publication dates 
+)
+
+# set up api key
+api_txt <- here::here("../../../../Desktop/private/nyt_api.txt")
+nyt_api_key <- readLines(api_txt)
+```
+
+# Connect to the New York Times API and send a query
+
+```{r}
+# create an object called t with the results of our query ("haaland)
+# from JSON flatten the JSON object, then convert to a data frame
+t <- jsonlite::fromJSON(paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=haaland&api-key=", "mrb3Gx3ed9yP1KDVybtq9F2yEXWIgAga"), flatten = TRUE)
+```
+
+## Explore object t
+```{r}
+# checking class
+class(t) # comes in with a class of list
+
+t <- t %>% data.frame() # class of t is now data.frame
+
+# inspect data
+dim(t) # 10 x 33
+names(t) # names shows us which variables are in t
+# we are going to work with response.docs.snippet
+# snippets = sentences
+```
+
+## Explore a sentence
+```{r}
+# pulls in the 9th sentence in the article 
+t$response.docs.snippet[9] 
+```
+
+## Explore from a bigger query
+```{r}
+term <- "Haaland"
+begin_date <- "202110120"
+end_date <- "20220401"
+
+# construct query url using API operators
+baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",
+                  term,
+                  "&begin_date", begin_date, "&end_date", end_date,
+                  "&fact_filter=true&api-key=", "mrb3Gx3ed9yP1KDVybtq9F2yEXWIgAga", sep = "")
+
+baseurl
+```
+
+```{r}
+# this code allows for obtaining multiple pages of query results 
+initialQuery <- fromJSON(baseurl)
+maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1) 
+
+pages <- list()
+for(i in 0:maxPages){
+  nytSearch <- fromJSON(paste0(baseurl, "&page=", i), flatten = TRUE) %>% data.frame() 
+  message("Retrieving page ", i)
+  pages[[i+1]] <- nytSearch 
+  # there are two rate limits per API: 4,000 requests per day and 10 requests per minute. You should sleep 6 seconds between calls to avoid hitting the per minute rate limit
+  Sys.sleep(6) 
+}
+class(nytSearch)
+
+# need to bind the pages and create a tibble from nytDa
+rbind_pages(pages)
+```
+
+
+```{r}
+# creating a data viz
+#nytDat <- read.csv("nytDat.csv")  
+
+nytSearch %>% 
+  group_by(response.docs.type_of_material) %>%
+  summarize(count=n()) %>%
+  mutate(percent = (count / sum(count))*100) %>%
+  ggplot() +
+  geom_bar(aes(y=percent, x=response.docs.type_of_material, fill=response.docs.type_of_material), stat = "identity") + coord_flip()
+```
+
+
+
+```{r}
+nytSearch %>%
+  mutate(pubDay=gsub("T.*","",response.docs.pub_date)) %>%
+  group_by(pubDay) %>%
+  summarise(count=n()) %>%
+  filter(count >= 2) %>%
+  ggplot() +
+  geom_bar(aes(x=reorder(pubDay, count), y=count), stat="identity") + coord_flip()
+```
+
+
+```{r}
+paragraph <- names(nytSearch)[6] #The 6th column, "response.doc.lead_paragraph", is the one we want here.  
+tokenized <- nytSearch %>%
+  unnest_tokens(word, paragraph)
+
+tokenized %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 5) %>% #illegible with all the words displayed
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+# Notes
+- gsub = global substitution
+
