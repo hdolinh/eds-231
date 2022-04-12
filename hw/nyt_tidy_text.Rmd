@@ -110,7 +110,7 @@ paragraph <- names(nytDat)[6] # response.doc.lead_paragraph
 tokenized <- nytDat %>%
   unnest_tokens(word, paragraph)
 
-tokenized[,34] # results of words variable
+tokenized[,34] # results of word variable
 ```
 
 Here I create an initial plot of the tokenized paragraphs. This plot includes words with a frequency of at least 10. The big takeaway from the plot is that it's not informative because stop words are still included.
@@ -144,7 +144,7 @@ tokenized %>%
        x = "Count")
 ```
 
-Here I am removing apostrophes, numbers, and stemmed the key term dinosaur.
+Here I am removing numbers and words with apostrophes, and stemmed the key terms dinosaur and time.
 
 ```{r}
 # stem dinosaur words
@@ -180,7 +180,7 @@ tokenized_clean_plot <- tokenized_clean %>%
 tokenized_clean_plot
 ```
 
-Here is my final word frequency plot for the leading paragraphs after I created `clean_tokens`. The big takeaway here is that I need to remove all the empty strings.
+Here is my final word frequency plot for the leading paragraphs after I created `clean_tokens` and removed the empty strings.
 
 ```{r}
 # remove empty strings
@@ -192,6 +192,7 @@ tokenized_clean_final <- tokenized_clean_tib %>%
   mutate(clean = reorder(clean, n))
 ```
 
+\newpage
 
 ```{r}
 # plot
