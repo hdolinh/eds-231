@@ -9,13 +9,16 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 
 librarian::shelf(
-  tidyr, # text analysis in R
+  tidyr,
+  # text analysis in R
   lubridate,
-  pdftools, # read in pdfs
+  pdftools,
+  # read in pdfs
   tidyverse,
   tidytext,
   here,
-  LexisNexisTools, # Nexis Uni data wrangling
+  LexisNexisTools,
+  # Nexis Uni data wrangling
   sentimentr,
   readr,
   readtext
@@ -26,20 +29,19 @@ librarian::shelf(
 
 From the [Nexis Uni database](https://www.library.ucsb.edu/research/db/211), I chose the key search term "carbon management". *Note: when I used `lnt_read` I was prompted that more than one language was detected and I chose English only.*
 
-```{r}
-# reading in 100 text results for carbon management
-path <- ("/Users/hdolinh/MEDS/EDS231/eds-231/hw/data/")
 
+```{r}
 my_files <- list.files(pattern = ".docx",
-                       path = path,
+                       path = here("hw/data"),
                        full.names = TRUE,
                        recursive = TRUE,
                        ignore.case = TRUE)
 
-data <- lnt_read(my_files) # object of class "LNT output"
+data <- lnt_read(my_files_test,
+                 exclude_lines = "^LOAD-DATE: |^UPDATE: |^GRAFIK: |^GRAPHIC: |^DATELINE: |^Graphic |^CONTACT: |^Contact |^Email")
 ```
 
-Here I am extract the metadata, articles, and paragraphs from the LNT object and converting them into data frames. **Note I receieved a warning that `data.frame()` was deprecated and to use `tibble()` instead.**
+Here I am extract the metadata, articles, and paragraphs from the LNT object and converting them into data frames. **Note I received a warning that `data.frame()` was deprecated and to use `tibble()` instead.**
 
 ```{r}
 meta_df <- data@meta
@@ -47,8 +49,8 @@ articles_df <- data@articles
 paragraphs_df <- data@paragraphs
 
 data2 <- tibble(element_id = seq(1:length(meta_df$Headline)), 
-                    data = meta_df$Date, 
-                    headline = meta_df$Headline)
+                data = meta_df$Date,
+                headline = meta_df$Headline)
 
 # use if necessary
 paragraphs_data <- tibble(element_id = paragraphs_df$Art_ID,
@@ -62,18 +64,24 @@ Here I am doing some cleaning to the text.
 
 ```{r}
 data3_clean <- data3 %>% 
-  # remove emails
+  # remove last email value
   mutate(text = str_remove_all(string = text,
-                               pattern = "\\S*@\\S*")) %>% # \\S* match any number of non-space characters
+                               pattern = "email")) %>% 
+  # remove remaining rows with "contact"
+  mutate(text = str_remove_all(string = text,
+                               pattern = "Contact")) %>%
   # remove websites   
   mutate(text = str_remove_all(string = text,
-                               pattern = "\\S*.com\\S*")) %>% 
+                               pattern = "\\S*.com\\S*")) %>%
   # remove dashes at the start of a string
   mutate(text = str_remove_all(string = text,
                                 pattern = "^-")) %>% 
   # remove punctuation
   mutate(text = str_remove_all(string = text,
                                pattern = "[:punct:]")) %>% 
+  # remove symbols (specifically +)
+  mutate(text = str_remove_all(string = text,
+                               pattern = "[:symbol:].\\s")) %>% 
   # remove phone numbers
   mutate(text = str_remove_all(string = text,
                                pattern = "[:digit:]{10,}"))
@@ -81,12 +89,11 @@ data3_clean <- data3 %>%
 # remove values that contain tags
 data3_clean <- data3_clean[!grepl("Tags", data3_clean$text),]
 
-# remove values with contact information
-data3_clean <- data3_clean[!grepl("Contact", data3_clean$text),]
-
 # remove blank values
 tib_clean <- subset(data3_clean, text != "")
 data3_clean <- tib_clean
+
+# Note(HD): \\S* match any number of non-space characters
 ```
 
 
