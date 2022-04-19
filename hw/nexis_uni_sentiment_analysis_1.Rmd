@@ -56,7 +56,7 @@ sentiment_ipcc <- sentiment_by(sent_ipcc_df$headline)
 
 sent_ipcc_df %>% arrange(sentiment_ipcc)
 ```
-
+Here I am pulling out the sentiment from the text.
 
 ```{r}
 sent_ipcc_aggregate <- sent_ipcc_df %>% 
@@ -89,7 +89,7 @@ my_files <- list.files(pattern = ".docx",
                        recursive = TRUE,
                        ignore.case = TRUE)
 
-data <- lnt_read(my_files_test,
+data <- lnt_read(my_files,
                  exclude_lines = "^LOAD-DATE: |^UPDATE: |^GRAFIK: |^GRAPHIC: |^DATELINE: |^Graphic |^CONTACT: |^Contact |^Email")
 ```
 
@@ -148,20 +148,68 @@ data3_clean <- tib_clean
 # Note(HD): \\S* match any number of non-space characters
 ```
 
-
-Here I am pulling out the sentiment from the text.
-
+Bing sentiment
 ```{r}
-my_text <- get_sentences(data3_clean$text)
-sent <- sentiment(my_text)
-
-sent_df <- inner_join(data3_clean, sent, by = "element_id")
-
-sentiment <- sentiment_by(sent_df$text)
-
-sent_df %>% arrange(sentiment)
+bing_sent <- get_sentiments('bing') 
 ```
 
+stop words
+```{r}
+custom_stop_words <- bind_rows(tibble(word = c("your_word"),  
+                                      lexicon = c("custom")), 
+                               stop_words)
+```
+
+
+unnest
+```{r}
+#unnest to word-level tokens, remove stop words, and join sentiment words
+ text_words <- data3_clean  %>%
+  unnest_tokens(output = word, input = text, token = 'words')
+ 
+ sent_words <- text_words %>% #break text into individual words
+  anti_join(custom_stop_words, by = 'word') %>% #returns only the rows without stop words
+  inner_join(bing_sent, by = 'word') #joins and retains only sentiment words
+```
+
+NRC emotion lexicon to obtain more specific sentiments
+```{r}
+nrc_sent <- get_sentiments('nrc') %>% 
+  filter(!sentiment %in% c("positive", "negative")) #requires downloading a large dataset via prompt
+
+# exploratory analysis
+nrc_fear <- get_sentiments("nrc") %>% 
+  filter(sentiment == "fear")
+
+#most common words by sentiment
+fear_words <- data3_clean  %>%
+  unnest_tokens(output = word, input = text, token = 'words') %>%
+  inner_join(nrc_fear) %>%
+  count(word, sort = TRUE)
+
+nrc_word_counts <- text_words %>%
+  inner_join(nrc_sent) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+```
+
+join nrc word cont and text words to get dates
+
+NOTE CHANGE FROM HEADLINE TO PARAGRAPH
+```{r}
+sentiment_plot <- text_words %>% 
+  inner_join(nrc_sent, by = "word") %>% 
+  group_by(data) %>% 
+  count(sentiment) %>% 
+  mutate(total_words_day = sum(n)) %>% 
+  mutate(pct_sent_day = n / total_words_day)
+```
+
+plot
+```{r}
+ggplot(data = sentiment_plot, aes(x = data, y = pct_sent_day, color = sentiment)) +
+  geom_smooth(method = "lm", se = F)
+```
 
 
 
