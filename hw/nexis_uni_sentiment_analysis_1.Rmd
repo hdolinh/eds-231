@@ -27,6 +27,58 @@ librarian::shelf(
 
 # Sentiment Anaysis I
 
+IPCC
+
+```{r}
+#to follow along with this example, download this .docx to your working directory: 
+#https://github.com/MaRo406/EDS_231-text-sentiment/blob/main/nexis_dat/Nexis_IPCC_Results.docx
+ipcc_files <- list.files(pattern = ".docx", path = here("hw/ipcc_data"),
+                       full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
+
+ipcc_data <- lnt_read(ipcc_files) #Object of class 'LNT output'
+
+
+meta_ipcc <- ipcc_data@meta
+articles_ipcc <- ipcc_data@articles
+paragraphs_ipcc <- ipcc_data@paragraphs
+
+ipcc_data2 <- tibble(element_id = seq(1:length(meta_ipcc$Headline)), date = meta_ipcc$Date, headline = meta_ipcc$Headline)
+```
+
+```{r}
+#can we create a similar graph to Figure 3A from Froelich et al.? 
+ipcc_text <- get_sentences(ipcc_data2$headline)
+sent_ipcc <- sentiment(ipcc_text)
+
+sent_ipcc_df <- inner_join(ipcc_data2, sent_ipcc, by = "element_id")
+
+sentiment_ipcc <- sentiment_by(sent_ipcc_df$headline)
+
+sent_ipcc_df %>% arrange(sentiment_ipcc)
+```
+
+
+```{r}
+sent_ipcc_aggregate <- sent_ipcc_df %>% 
+  mutate(sentiment_category = case_when(sentiment > 0 ~ "Positive",
+                                        sentiment == 0 ~ "Neutral",
+                                        sentiment < 0 ~ "Negative")) %>% 
+  group_by(date, sentiment_category) %>% 
+  summarize(count = n())
+```
+
+Now I plot
+```{r}
+ggplot(data = sent_ipcc_aggregate, aes(x = date, y = count, color = sentiment_category)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Sentiment of IPCC Articles from Nexis Uni database from 2022/04/11 - 2022/04/11",
+       x = "Date",
+       y = "Count",
+       color = "Sentiment Category")
+```
+
+
 From the [Nexis Uni database](https://www.library.ucsb.edu/research/db/211), I chose the key search term "carbon management". *Note: when I used `lnt_read` I was prompted that more than one language was detected and I chose English only.*
 
 
