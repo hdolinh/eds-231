@@ -27,26 +27,35 @@ librarian::shelf(
 
 # Sentiment Anaysis I
 
-IPCC
+0. Using the Intergovernmental Panel on Climate Change (IPCC) Nexis Uni dataset, I was able to recreate Figure 1A from [Public Perceptions of Aquaculture: Evaluating Spatiotemporal Patterns of Sentiment around the World, Froehlich et al](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0169281). 
+
+First, I read in the data and created a data frame that contains the necessary data I need: `element_id`, `date`, and `headline`.
 
 ```{r}
-#to follow along with this example, download this .docx to your working directory: 
-#https://github.com/MaRo406/EDS_231-text-sentiment/blob/main/nexis_dat/Nexis_IPCC_Results.docx
+# downloaded data from eds 231 github
+# don't have to specify file in here() bc list.files automatically looks 
+# for the files based on the pattern
 ipcc_files <- list.files(pattern = ".docx", path = here("hw/ipcc_data"),
-                       full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
+                         full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
 
-ipcc_data <- lnt_read(ipcc_files) #Object of class 'LNT output'
+ipcc_data <- lnt_read(ipcc_files) # class 'LNToutput'
 
-
+# pull out necessary data
 meta_ipcc <- ipcc_data@meta
 articles_ipcc <- ipcc_data@articles
 paragraphs_ipcc <- ipcc_data@paragraphs
 
-ipcc_data2 <- tibble(element_id = seq(1:length(meta_ipcc$Headline)), date = meta_ipcc$Date, headline = meta_ipcc$Headline)
+# create tibble
+ipcc_data2 <- tibble(element_id = seq(1:length(meta_ipcc$Headline)), 
+                     date = meta_ipcc$Date, 
+                     headline = meta_ipcc$Headline)
 ```
 
-```{r}
-#can we create a similar graph to Figure 3A from Froelich et al.? 
+Next I obtain all the headline sentences using `get_sentences()`, which resulted in a total of 100 lists. I then use `sentiment()` to approximate a polarity score of each sentence ranging from -1 to 1, or negative to positive. I join the data frame of headlines I created in the code chunk above with the data frame of sentiment polarity scores. My joined data frame has a length of 109 because some headlines are made up of multiple sentences. 
+
+`sentiment_by` provides a data frame that has estimated the sentiment grouped by `headline`.
+
+```{r, results='hide'}
 ipcc_text <- get_sentences(ipcc_data2$headline)
 sent_ipcc <- sentiment(ipcc_text)
 
@@ -56,9 +65,10 @@ sentiment_ipcc <- sentiment_by(sent_ipcc_df$headline)
 
 sent_ipcc_df %>% arrange(sentiment_ipcc)
 ```
-Here I am pulling out the sentiment from the text.
 
-```{r}
+Here I am assigning each polarity score a sentiment category of Positive, Neutral, or Negative. Then I grouped by date and sentiment category to find the total counts of each sentiment category by date. I need these categories to recreate the Froehlich et al paper.
+
+```{r, results='hide'}
 sent_ipcc_aggregate <- sent_ipcc_df %>% 
   mutate(sentiment_category = case_when(sentiment > 0 ~ "Positive",
                                         sentiment == 0 ~ "Neutral",
@@ -67,14 +77,19 @@ sent_ipcc_aggregate <- sent_ipcc_df %>%
   summarize(count = n())
 ```
 
-Now I plot
+Now that I have my data in the right format, I can recreate the plot.
+
 ```{r}
-ggplot(data = sent_ipcc_aggregate, aes(x = date, y = count, color = sentiment_category)) +
-  geom_line() +
+ggplot(data = sent_ipcc_aggregate, 
+       aes(x = date, y = count, color = sentiment_category)) +
+  geom_line(size = 1.5) +
   theme_minimal() +
-  labs(title = "Sentiment of IPCC Articles from Nexis Uni database from 2022/04/11 - 2022/04/11",
+  theme(legend.position = c(0.8, 0.7)) +
+  scale_x_date(date_labels = "%Y-%m-%d",
+               breaks = unique(sent_ipcc_aggregate$date)) +
+  labs(title = "Sentiment of IPCC Articles from Nexis Uni database (2022/04/04 - 2022/04/11)",
        x = "Date",
-       y = "Count",
+       y = "Number of headlines",
        color = "Sentiment Category")
 ```
 
