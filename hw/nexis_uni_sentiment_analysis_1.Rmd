@@ -27,7 +27,7 @@ librarian::shelf(
 
 # Sentiment Anaysis I
 
-0. Using the Intergovernmental Panel on Climate Change (IPCC) Nexis Uni dataset, I was able to recreate Figure 1A from [Public Perceptions of Aquaculture: Evaluating Spatiotemporal Patterns of Sentiment around the World, Froehlich et al](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0169281). 
+Using the Intergovernmental Panel on Climate Change (IPCC) Nexis Uni dataset, I was able to recreate Figure 1A from [Public Perceptions of Aquaculture: Evaluating Spatiotemporal Patterns of Sentiment around the World, Froehlich et al](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0169281). 
 
 First, I read in the data and created a data frame that contains the necessary data I need: `element_id`, `date`, and `headline`.
 
@@ -35,8 +35,11 @@ First, I read in the data and created a data frame that contains the necessary d
 # downloaded data from eds 231 github
 # don't have to specify file in here() bc list.files automatically looks 
 # for the files based on the pattern
-ipcc_files <- list.files(pattern = ".docx", path = here("hw/ipcc_data"),
-                         full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
+ipcc_files <- list.files(pattern = ".docx", 
+                         path = here("hw/ipcc_data"),
+                         full.names = TRUE, 
+                         recursive = TRUE, 
+                         ignore.case = TRUE)
 
 ipcc_data <- lnt_read(ipcc_files) # class 'LNToutput'
 
@@ -94,137 +97,162 @@ ggplot(data = sent_ipcc_aggregate,
 ```
 
 
-From the [Nexis Uni database](https://www.library.ucsb.edu/research/db/211), I chose the key search term "carbon management". *Note: when I used `lnt_read` I was prompted that more than one language was detected and I chose English only.*
+From the [Nexis Uni database](https://www.library.ucsb.edu/research/db/211), I chose the key search term **"carbon management"**. *Note: when I used `lnt_read` I was prompted that more than one language was detected and I chose English only.*
 
-
-```{r}
+```{r, results='hide', message=FALSE}
 my_files <- list.files(pattern = ".docx",
                        path = here("hw/data"),
                        full.names = TRUE,
                        recursive = TRUE,
                        ignore.case = TRUE)
 
+# used exclude lines to remove unnecessary lines
 data <- lnt_read(my_files,
                  exclude_lines = "^LOAD-DATE: |^UPDATE: |^GRAFIK: |^GRAPHIC: |^DATELINE: |^Graphic |^CONTACT: |^Contact |^Email")
 ```
 
-Here I am extract the metadata, articles, and paragraphs from the LNT object and converting them into data frames. **Note I received a warning that `data.frame()` was deprecated and to use `tibble()` instead.**
+Here I am extracting the metadata, articles, and paragraphs from the LNT object and converting them into data frames. I had to create two separate data frames and then join the data together because the paragraph data did not have date or other metadata.
 
 ```{r}
 meta_df <- data@meta
 articles_df <- data@articles
 paragraphs_df <- data@paragraphs
 
-data2 <- tibble(element_id = seq(1:length(meta_df$Headline)), 
-                data = meta_df$Date,
+# metadata like date and headline
+data2 <- tibble(element_id = seq(1:length(meta_df$Headline)),
+                date = meta_df$Date,
                 headline = meta_df$Headline)
 
-# use if necessary
+# text data from paragraphs
 paragraphs_data <- tibble(element_id = paragraphs_df$Art_ID,
                           text = paragraphs_df$Paragraph)
 
+# have to join because paragraphs_df doesn't contain date or other metadata
 data3 <- inner_join(data2, paragraphs_data, by = "element_id")
 ```
 
 
-Here I am doing some cleaning to the text.
+Here I am doing some cleaning of the text (this feels like it could be an endless task).
 
 ```{r}
 data3_clean <- data3 %>% 
-  # remove last email value
-  mutate(text = str_remove_all(string = text,
-                               pattern = "email")) %>% 
-  # remove remaining rows with "contact"
-  mutate(text = str_remove_all(string = text,
-                               pattern = "Contact")) %>%
-  # remove websites   
+  # remove short values i.e. link to story, visit us on social media, etc.
+  filter(nchar(text) > 50) %>% 
+  # remove websites
   mutate(text = str_remove_all(string = text,
                                pattern = "\\S*.com\\S*")) %>%
+  # remove email addresses
+  mutate(text = str_remove_all(string = text,
+                               pattern = "\\S*@\\S*")) %>% 
   # remove dashes at the start of a string
   mutate(text = str_remove_all(string = text,
-                                pattern = "^-")) %>% 
-  # remove punctuation
-  mutate(text = str_remove_all(string = text,
-                               pattern = "[:punct:]")) %>% 
-  # remove symbols (specifically +)
-  mutate(text = str_remove_all(string = text,
-                               pattern = "[:symbol:].\\s")) %>% 
-  # remove phone numbers
-  mutate(text = str_remove_all(string = text,
-                               pattern = "[:digit:]{10,}"))
-
-# remove values that contain tags
-data3_clean <- data3_clean[!grepl("Tags", data3_clean$text),]
-
-# remove blank values
-tib_clean <- subset(data3_clean, text != "")
-data3_clean <- tib_clean
+                                pattern = "^-")) %>%
+  # remove short values after removing websites, addresses, etc
+  filter(nchar(text) > 50)
 
 # Note(HD): \\S* match any number of non-space characters
 ```
 
-Bing sentiment
-```{r}
-bing_sent <- get_sentiments('bing') 
-```
+To finish cleaning the data, I create a data frame of stop words to remove from the text.
 
-stop words
 ```{r}
-custom_stop_words <- bind_rows(tibble(word = c("your_word"),  
-                                      lexicon = c("custom")), 
+custom_stop_words <- bind_rows(tibble(word = c("your_word"),
+                                      lexicon = c("custom")),
                                stop_words)
 ```
 
+Now I can unnest the text to word-level tokens and remove stop words.
 
-unnest
 ```{r}
-#unnest to word-level tokens, remove stop words, and join sentiment words
  text_words <- data3_clean  %>%
-  unnest_tokens(output = word, input = text, token = 'words')
- 
- sent_words <- text_words %>% #break text into individual words
-  anti_join(custom_stop_words, by = 'word') %>% #returns only the rows without stop words
-  inner_join(bing_sent, by = 'word') #joins and retains only sentiment words
+  unnest_tokens(output = word, input = text, token = 'words') %>% 
+  anti_join(custom_stop_words, by = "word")
 ```
 
-NRC emotion lexicon to obtain more specific sentiments
-```{r}
-nrc_sent <- get_sentiments('nrc') %>% 
-  filter(!sentiment %in% c("positive", "negative")) #requires downloading a large dataset via prompt
+To start my sentiment analysis, I am using the Bing sentiment analysis lexicon. I join the Bing lexicon with the cleaned and unnested data set to retain only sentiment words and a binary categorical sentiment value of positive or negative.
 
-# exploratory analysis
+```{r}
+bing_sent <- get_sentiments('bing') 
+
+sent_words <- text_words %>% inner_join(bing_sent, by = 'word')
+```
+
+To obtain more specific sentiment values, I use the NRC emotion lexicon and filtered out the binary positive and negative sentiments. I did some exploratory analysis with the sentiment "fear" and found the top "fear" related words for carbon management. I plotted these results. I thought it was interesting that the top three words were change, government, and intelligence. 
+
+```{r, message=FALSE}
+# obtaining nrc sentiments remove positive and negative
+nrc_sent <- get_sentiments('nrc') %>% 
+  filter(!sentiment %in% c("positive", "negative")) 
+
+# exploratory analysis with fear sentiment
 nrc_fear <- get_sentiments("nrc") %>% 
   filter(sentiment == "fear")
 
-#most common words by sentiment
+# most common words for fear sentiment
 fear_words <- data3_clean  %>%
   unnest_tokens(output = word, input = text, token = 'words') %>%
   inner_join(nrc_fear) %>%
-  count(word, sort = TRUE)
+  count(word, sort = TRUE) %>% 
+  filter(n > 10)
 
+ggplot(data = fear_words, aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  theme_light() +
+  labs(title = "Top words with fear sentiment for 'carbon management'",
+       y = "Count",
+       x = "Sentiment Category \n(NRC emotion lexicon)")
+```
+
+I also found the most common sentiment words in the data set and plotted these results. With more time, I would stem the word management and manage.
+
+```{r}
+# most common words by sentiment
 nrc_word_counts <- text_words %>%
   inner_join(nrc_sent) %>%
   count(word, sentiment, sort = TRUE) %>%
-  ungroup()
+  ungroup() %>% 
+  filter(n > 50)
+
+ggplot(data = nrc_word_counts, aes(x = reorder(word, n), y = n, fill = sentiment)) +
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  theme_light() +
+  theme(legend.position = c(0.85, 0.2)) +
+  labs(title = "Top words by sentiment for 'carbon management'",
+       y = "Count",
+       x = "Sentiment Category \n(NRC emotion lexicon)",
+       fill = "Sentiment Category")
 ```
 
-join nrc word cont and text words to get dates
+Lastly, I am going to plot the amount of emotion words (all eight from the NRC) as a percentage of all the emotion words used each day (aggregate text from articles published on the same day) to show how the emotion words change over time.
 
-NOTE CHANGE FROM HEADLINE TO PARAGRAPH
+To do this I joined the NRC lexicon data frame with my unnested paragraph words and then calculate the total words per day and the percentage of all emotion words per day.
+
 ```{r}
-sentiment_plot <- text_words %>% 
+emotion_plot <- text_words %>% 
   inner_join(nrc_sent, by = "word") %>% 
-  group_by(data) %>% 
+  group_by(date) %>% 
   count(sentiment) %>% 
   mutate(total_words_day = sum(n)) %>% 
   mutate(pct_sent_day = n / total_words_day)
+
+ggplot(data = emotion_plot, 
+       aes(x = date, 
+           y = pct_sent_day)) +
+  geom_line(color = "#8da0cb",
+            size = .5) +
+  geom_smooth(method = "lm", se = F, color = "red") +
+  scale_x_date(date_labels = "%b-%Y") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_light() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~ str_to_title(sentiment), ncol = 4) +
+  labs(title = "Daily percentage of emotion sentiment for 'carbon management' \nAugust 2020 - April 2022",
+       x = "Date",
+       y = "Daily Percentage")
 ```
 
-plot
-```{r}
-ggplot(data = sentiment_plot, aes(x = data, y = pct_sent_day, color = sentiment)) +
-  geom_smooth(method = "lm", se = F)
-```
 
 
 
