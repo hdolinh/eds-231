@@ -1,0 +1,111 @@
+---
+title: "Assignment 4: Sentiment Analysis II"
+author: "Halina Do-Linh"
+date: '`r format(Sys.time(), "%m/%d/%Y")`'
+output: pdf_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# loaded packages 
+librarian::shelf(
+  quanteda,
+  quanteda.sentiment,
+  quanteda.textstats,
+  qdap, # get top 10 words
+  tidyverse,
+  tidytext,
+  here,
+  janitor,
+  lubridate,
+  wordcloud, # visualization of common words in the data set
+  reshape2
+)
+
+# read in data and basic cleaning
+ipcc_twitter_data <- read_csv(here("hw/data/IPCC_tweets_April1-10.csv")) %>% 
+  clean_names() %>% 
+  select(c("date", "title"))
+```
+
+First round of tidying: I created the data frame needed to do the sentiment analysis.  
+
+```{r}
+ipcc_twitter_clean <- tibble(id = seq(1:length(ipcc_twitter_data$title)),
+                             date = as.Date(ipcc_twitter_data$date, "%m/%d/%y"),
+                             text = ipcc_twitter_data$title)
+```
+
+Here is the cleaning we did from the lab in class.
+
+```{r}
+# remove URLs from the tweets
+ipcc_twitter_clean$text <- gsub("http[^[:space:]]*", "",
+                                ipcc_twitter_clean$text)
+
+# make all the text lowercase 
+ipcc_twitter_clean$text <- str_to_lower(ipcc_twitter_clean$text)
+```
+
+Think about how to further clean a twitter data set. Let’s assume that the mentions of twitter accounts is not useful to us. Remove them from the text field of the tweets tibble.
+
+```{r}
+# removing mentions from tweets 
+ipcc_twitter_clean$text <- gsub("@\\w+", "", ipcc_twitter_clean$text)
+```
+
+Now I'm going to load the sentiment lexicons and tokenize the tweets.
+
+```{r}
+# load sentiment lexicons
+bing_sent <- get_sentiments('bing')
+nrc_sent <- get_sentiments('nrc')
+
+ipcc_twitter_words <- ipcc_twitter_clean %>%
+  select(id, date, text) %>%
+  # tokenize tweets to individual words
+  unnest_tokens(output = word,
+                input = text,
+                token = "words") %>%
+  anti_join(stop_words, by = "word") %>%
+  # remove digits 
+  mutate(word = str_remove_all(string = word, pattern = "[:digit:]")) %>% 
+  # remove empty values
+  filter(word != "") %>% 
+  left_join(bing_sent, by = "word") %>%
+  left_join(tribble(~ sentiment, ~ sent_score,
+                    "positive", 1,
+                    "negative",-1),
+            by = "sentiment")
+```
+
+Before I move forward with sentiment analysis, I create a plot comparing the ten most common terms in the tweets per day. Do you notice anything interesting?
+
+```{r}
+common_tweets <- ipcc_twitter_words %>% 
+  group_by(date) %>% 
+  summarize(freq_terms(word, 10))
+
+ggplot(data = common_tweets, aes(x = date, y = FREQ, fill = WORD)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none")
+```
+Here I am giving each tweet an average sentiment score. To do this, I join the cleaned data with the tokenzied word data. 
+
+```{r}
+# take average sentiment score by tweet
+tweets_sent <- ipcc_twitter_clean %>%
+  left_join(ipcc_twitter_words %>%
+              group_by(id) %>%
+              summarize(sent_score = mean(sent_score, na.rm = T)),
+            by = "id")
+```
+
+
+
+Adjust the wordcloud in the “wordcloud” chunk by coloring the positive and negative words so they are identifiable.
+
+Let’s say we are interested in the most prominent entities in the Twitter discussion. Which are the top 10 most tagged accounts in the data set. Hint: the “explore_hashtags” chunk is a good starting point.
+
+The Twitter data download comes with a variable called “Sentiment” that must be calculated by Brandwatch. Use your own method to assign each tweet a polarity score (Positive, Negative, Neutral) and compare your classification to Brandwatch’s (hint: you’ll need to revisit the “raw_tweets” data frame).
