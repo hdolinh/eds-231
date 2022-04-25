@@ -5,8 +5,10 @@ date: '`r format(Sys.time(), "%m/%d/%Y")`'
 output: pdf_document
 ---
 
-```{r setup, include = FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, include = FALSE, }
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
 
 # loaded packages 
 librarian::shelf(
@@ -24,7 +26,7 @@ librarian::shelf(
 )
 
 # read in data and basic cleaning
-ipcc_twitter_data <- read_csv(here("hw/data/IPCC_tweets_April1-10.csv")) %>% 
+ipcc_twitter_data <- read_csv(here("hw/data/IPCC_tweets_April1-10_sample.csv")) %>% 
   clean_names() %>% 
   select(c("date", "title"))
 ```
@@ -48,7 +50,7 @@ ipcc_twitter_clean$text <- gsub("http[^[:space:]]*", "",
 ipcc_twitter_clean$text <- str_to_lower(ipcc_twitter_clean$text)
 ```
 
-Think about how to further clean a twitter data set. Let’s assume that the mentions of twitter accounts is not useful to us. Remove them from the text field of the tweets tibble.
+Remove mentions of twitter accounts from the text field of the tweets tibble.
 
 ```{r}
 # removing mentions from tweets 
@@ -69,10 +71,10 @@ ipcc_twitter_words <- ipcc_twitter_clean %>%
                 input = text,
                 token = "words") %>%
   anti_join(stop_words, by = "word") %>%
-  # remove digits 
-  mutate(word = str_remove_all(string = word, pattern = "[:digit:]")) %>% 
+  # remove digits
+  mutate(word = str_remove_all(string = word, pattern = "[:digit:]")) %>%
   # remove empty values
-  filter(word != "") %>% 
+  filter(word != "") %>%
   left_join(bing_sent, by = "word") %>%
   left_join(tribble(~ sentiment, ~ sent_score,
                     "positive", 1,
@@ -80,32 +82,99 @@ ipcc_twitter_words <- ipcc_twitter_clean %>%
             by = "sentiment")
 ```
 
-Before I move forward with sentiment analysis, I create a plot comparing the ten most common terms in the tweets per day. Do you notice anything interesting?
+Before I move forward with sentiment analysis, I create a plot comparing the ten most common terms in the tweets per day. I noticed that some days have more than ten words because the same frequency occurs for those words on a specific day. Additionally, the words "ipcc", "climate", and "report" are the top 3 words for every day except for 2022-04-03 where the second more common word is "dr".
 
-```{r}
+```{r, fig.height=4, fig.width=3}
 common_tweets <- ipcc_twitter_words %>% 
   group_by(date) %>% 
   summarize(freq_terms(word, 10))
 
-ggplot(data = common_tweets, aes(x = date, y = FREQ, fill = WORD)) +
-  geom_bar(stat = "identity") +
-  theme(legend.position = "none")
+dates <- unique(common_tweets$date)
+plot_list = list()
+for (i in seq_along(dates)){
+
+  df <- common_tweets %>%
+    filter(date == dates[i])
+  
+  p <- ggplot(data = df, aes(x = reorder(WORD, FREQ), y = FREQ)) +
+    geom_bar(stat = "identity") +
+    coord_flip() +
+    theme_light() +
+    labs(title = paste("Top Words:", dates[[i]]),
+       x = NULL,
+       y = "Frequency")
+  
+  plot_list[[i]] = p
+  
+  print(p)
+}
 ```
-Here I am giving each tweet an average sentiment score. To do this, I join the cleaned data with the tokenzied word data. 
+
+\newpage
+
+Here I adjusted the wordcloud from lab so the coloring for positive and negative words are distinguishable. 
+
+```{r, fig.height=3, fig.width=3, fig.align='center'}
+ipcc_twitter_words %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("darkred", "#d8b365"),
+                   max.words = 100)
+```
+
+To find the top 10 most tagged accounts in the data set, I first create a corpus using the `quanteda` package.
+
+```{r, results='hide'}
+corpus <- corpus(ipcc_twitter_data$title) # enter quanteda
+summary(corpus)
+```
+
+Then I tokenzie all the words in the corpus (which are tweets).
 
 ```{r}
-# take average sentiment score by tweet
-tweets_sent <- ipcc_twitter_clean %>%
-  left_join(ipcc_twitter_words %>%
-              group_by(id) %>%
-              summarize(sent_score = mean(sent_score, na.rm = T)),
-            by = "id")
+# tokenize the text so each tweet is a list of tokens
+tokens <- tokens(corpus)
 ```
 
+The tokenized words are pretty messy, so I need to do some cleaning before moving forward with my analysis. Here I am removing punctuation (okay to remove because "@" is a symbol), numbers and stop words. 
 
+```{r}
+# clean it up
+tokens <- tokens(tokens, remove_punct = TRUE,
+                 remove_numbers = TRUE)
 
-Adjust the wordcloud in the “wordcloud” chunk by coloring the positive and negative words so they are identifiable.
+# stopwords lexicon built in to quanteda
+tokens <- tokens_select(tokens, stopwords('english'), selection = 'remove') 
 
-Let’s say we are interested in the most prominent entities in the Twitter discussion. Which are the top 10 most tagged accounts in the data set. Hint: the “explore_hashtags” chunk is a good starting point.
+tokens <- tokens_tolower(tokens)
+```
+
+After cleaning the corpus, I use `tokens_keep()` to find all the mentions and then create a document-feature matrix (dfm) of the tokens with a tagged account. Then I use `textstat_frequency()` to create a data frame of all the tagged accounts and how frequent they are. 
+
+```{r}
+mention_tweets <- tokens(corpus) %>% tokens_keep(pattern = "@*")
+
+dfm_mention <- dfm(mention_tweets)
+
+mention_freq <- textstat_frequency(dfm_mention, n = 100)
+head(mention_freq, 10)
+```
+
+Lastly, I created a wordcloud of all the mentions.
+
+```{r, fig.height=4, fig.width=4, fig.align='center'}
+# tidytext gives us tools to convert to tidy from non-tidy formats
+mention_tib <- tidy(dfm_mention)
+
+mention_tib %>%
+   count(term) %>%
+   with(wordcloud(term, n, max.words = 100))
+```
 
 The Twitter data download comes with a variable called “Sentiment” that must be calculated by Brandwatch. Use your own method to assign each tweet a polarity score (Positive, Negative, Neutral) and compare your classification to Brandwatch’s (hint: you’ll need to revisit the “raw_tweets” data frame).
+
+```{r}
+
+```
+
