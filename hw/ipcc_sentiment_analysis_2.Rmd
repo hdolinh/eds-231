@@ -22,7 +22,8 @@ librarian::shelf(
   janitor,
   lubridate,
   wordcloud, # visualization of common words in the data set
-  reshape2
+  reshape2,
+  patchwork
 )
 
 # read in data and basic cleaning
@@ -172,9 +173,73 @@ mention_tib %>%
    with(wordcloud(term, n, max.words = 100))
 ```
 
-The Twitter data download comes with a variable called “Sentiment” that must be calculated by Brandwatch. Use your own method to assign each tweet a polarity score (Positive, Negative, Neutral) and compare your classification to Brandwatch’s (hint: you’ll need to revisit the “raw_tweets” data frame).
+Here I am calling in the "raw tweets" with the sentiment scores calculated by Brandwatch.
 
 ```{r}
-
+# read in data and basic cleaning
+ipcc_twitter_sent <- read_csv(here("hw/data/IPCC_tweets_April1-10_sample.csv")) %>%
+  clean_names() %>%
+  select(c("date", "title", "sentiment"))
 ```
+
+Here I calculated a polarity score and assigned each tweet a polarity score of Positive, Negative, or Neutral.
+
+```{r}
+# take average sentiment score by tweet
+my_sent <- ipcc_twitter_clean %>%
+  left_join(ipcc_twitter_words %>%
+              group_by(id) %>%
+              summarize(sent_score = mean(sent_score, na.rm = T)),
+            by = "id")
+# assign scores a category of positive, neutral, or negative
+my_sent_classified <- my_sent %>% 
+  mutate(sent_score = case_when(sent_score > 0 ~ "positive",
+                                sent_score == 0 ~ "neutral",
+                                sent_score < 0 ~ "negative")) %>% 
+  drop_na(sent_score)
+```
+
+I created two plots to show the comparison between the two sentiment classifications.
+
+```{r}
+brandwatch_sent <- ipcc_twitter_sent %>% 
+  group_by(sentiment) %>% 
+  summarize(count = n()) %>% 
+  ggplot(aes(x = reorder(sentiment, count), y = count, 
+             fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_classic() +
+  theme(legend.position = "bottom") +
+  labs(title = "Brandwatch Sentiment",
+       x = "Sentiment",
+       y = "Count") +
+  geom_text(aes(x = sentiment, y = count,
+            label = count),
+            nudge_y = 100) +
+  scale_fill_manual(name = NULL, 
+                    values = c("#d8b365", "lightgray", "#5ab4ac"))
+
+my_sent_plot <- my_sent_classified %>% 
+  group_by(sent_score) %>% 
+  summarize(count = n()) %>% 
+  ggplot(aes(x = reorder(sent_score, count), y = count,
+             fill = sent_score)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(title = "My Calculated Sentiment",
+       x = "Sentiment",
+       y = "Count") +
+  geom_text(aes(x = sent_score, y = count,
+            label = count),
+            nudge_y = 50) +
+  scale_fill_manual(name = "Sentiment", 
+                    values = c("#d8b365", "lightgray", "#5ab4ac"))
+
+brandwatch_sent / my_sent_plot
+```
+
+
 
