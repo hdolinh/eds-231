@@ -23,7 +23,8 @@ librarian::shelf(
   lubridate,
   wordcloud, # visualization of common words in the data set
   reshape2,
-  patchwork
+  patchwork,
+  sentimentr
 )
 
 # read in data and basic cleaning
@@ -182,26 +183,27 @@ ipcc_twitter_sent <- read_csv(here("hw/data/IPCC_tweets_April1-10_sample.csv")) 
   select(c("date", "title", "sentiment"))
 ```
 
-Here I calculated a polarity score and assigned each tweet a polarity score of Positive, Negative, or Neutral.
+Here I calculated a polarity score and assigned each tweet a polarity of Positive, Negative, or Neutral.
 
 ```{r}
 # take average sentiment score by tweet
 my_sent <- ipcc_twitter_clean %>%
-  left_join(ipcc_twitter_words %>%
-              group_by(id) %>%
-              summarize(sent_score = mean(sent_score, na.rm = T)),
-            by = "id")
+  get_sentences(text) %>% # puts data in right format to use sentiment()
+  sentiment() %>% 
+  group_by(id) %>%
+  summarize(sent_score = mean(sentiment))
+
 # assign scores a category of positive, neutral, or negative
 my_sent_classified <- my_sent %>% 
   mutate(sent_score = case_when(sent_score > 0 ~ "positive",
                                 sent_score == 0 ~ "neutral",
-                                sent_score < 0 ~ "negative")) %>% 
-  drop_na(sent_score)
+                                sent_score < 0 ~ "negative"))
 ```
 
-I created two plots to show the comparison between the two sentiment classifications. *Note: in my calculated sentiment, I dropped 846 NA's.*
+I created two plots to show the comparison between the two sentiment classifications.
 
 ```{r}
+# brandwatch wrangling and plot
 brandwatch_sent <- ipcc_twitter_sent %>% 
   group_by(sentiment) %>% 
   summarize(count = n()) %>% 
@@ -216,10 +218,11 @@ brandwatch_sent <- ipcc_twitter_sent %>%
        y = "Count") +
   geom_text(aes(x = sentiment, y = count,
             label = count),
-            nudge_y = 100) +
+            nudge_y = 80) +
   scale_fill_manual(name = NULL, 
                     values = c("#d8b365", "lightgray", "#5ab4ac"))
 
+# my calculate sentiment wrangling and plot
 my_sent_plot <- my_sent_classified %>% 
   group_by(sent_score) %>% 
   summarize(count = n()) %>% 
