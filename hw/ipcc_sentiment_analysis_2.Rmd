@@ -199,7 +199,7 @@ my_sent_classified <- my_sent %>%
   drop_na(sent_score)
 ```
 
-I created two plots to show the comparison between the two sentiment classifications.
+I created two plots to show the comparison between the two sentiment classifications. *Note: in my calculated sentiment, I dropped 846 NA's.*
 
 ```{r}
 brandwatch_sent <- ipcc_twitter_sent %>% 
