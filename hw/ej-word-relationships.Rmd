@@ -1,0 +1,40 @@
+---
+title: 'Topic 5: Word Relationships EPA Reports on EJ'
+author: "Halina Do-Linh"
+date: '`r format(Sys.time(), "%m/%d/%Y")`'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+librarian::shelf(
+  tidyr, # text analysis in R
+  pdftools, # read in EPA pdf reports??
+  lubridate,
+  tidyverse,
+  tidytext,
+  readr,
+  quanteda,
+  readtext, # quanteda subpackage for reading pdf
+  quanteda.textstats,
+  quanteda.textplots,
+  ggplot2,
+  forcats,
+  stringr,
+  widyr, # pairwise correlations
+  igraph, # network plots
+  ggraph,
+  here
+)
+
+# read in data
+```
+
+1.  What are the most frequent trigrams in the dataset? How does this compare to the most frequent bigrams? Which n-gram seems more informative here, and why?
+
+2.  Choose a new focal term to replace "justice" and recreate the correlation table and network (see corr_paragraphs and corr_network chunks). Explore some of the plotting parameters in the cor_network chunk to see if you can improve the clarity or amount of information your plot conveys. Make sure to use a different color for the ties!
+
+3.  Write a function that allows you to conduct a keyness analysis to compare two individual EPA reports (hint: that means target and reference need to both be individual reports). Run the function on 3 pairs of reports, generating 3 keyness plots.
+
+4.  Select a word or multi-word term of interest and identify words related to it using windowing and keyness comparison. To do this you will create to objects: one containing all words occurring within a 10-word window of your term of interest, and the second object containing all other words. Then run a keyness comparison on these objects. Which one is the target, and which the reference? [Hint](https://tutorials.quanteda.io/advanced-operations/target-word-collocations/) 
