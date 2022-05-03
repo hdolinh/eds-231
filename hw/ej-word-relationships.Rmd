@@ -34,9 +34,6 @@ librarian::shelf(
 files <- list.files(path = here::here("hw/epa_data"),
                     pattern = "pdf$", full.names = TRUE)
 
-# subset to include only EPA report PDFs
-files <- str_subset(files, pattern="EPA")
-
 ej_reports <- lapply(files, pdf_text)
 
 # create df of all 6 PDf reports
@@ -118,7 +115,7 @@ head(tstat_freq, 10)
 ```
 
 
-What are the most frequent trigrams in the dataset? How does this compare to the most frequent bigrams? Which n-gram seems more informative here, and why?
+\noindent 1. What are the most frequent trigrams in the dataset? How does this compare to the most frequent bigrams? Which n-gram seems more informative here, and why?
 
 ```{r}
 # most freq trigrams
@@ -147,7 +144,7 @@ head(tstat_freq2, 10)
 
 **Answer:** The most frequent trigrams do not seem more informative than the most frequent bigrams. One of the top trigrams is `fy2017_progress_report` which is not informative at all. Because of this, I would say the bigrams are the more informative n-grams. 
 
-Choose a new focal term to replace "justice" and recreate the correlation table and network (see corr_paragraphs and corr_network chunks). Explore some of the plotting parameters in the cor_network chunk to see if you can improve the clarity or amount of information your plot conveys. Make sure to use a different color for the ties!
+\noindent 2. Choose a new focal term to replace "justice" and recreate the correlation table and network (see corr_paragraphs and corr_network chunks). Explore some of the plotting parameters in the cor_network chunk to see if you can improve the clarity or amount of information your plot conveys. Make sure to use a different color for the ties!
 
 Here I am tokenizing the paragraphs from my tidy corpus, and then tokenizing the paragraphs by words.
 
@@ -172,7 +169,7 @@ Here I am identifying which words tend to occur close together in the EPA report
 ```{r}
 # closely related pairs
 word_pairs <- paragraph_words %>% 
-  pairwise_count(par_id, word, sort = TRUE, upper = FALSE) %>%
+  pairwise_count(word, par_id, sort = TRUE, upper = FALSE) %>%
   anti_join(add_stops, by = c("item1" = "word")) %>%
   anti_join(add_stops, by = c("item2" = "word"))
 
@@ -219,8 +216,9 @@ greenspaces_correlations  %>%
   filter(n <= 50) %>%
   graph_from_data_frame() %>%
   ggraph(layout = "fr") +
-  geom_edge_link(aes(edge_alpha = correlation, edge_width = correlation), edge_colour = "purple4") +
-  geom_node_point(size = 5) +
+  geom_edge_link(aes(edge_alpha = correlation, edge_width = correlation), edge_colour = "purple4",
+                 size = 2) +
+  geom_node_point(size = 3) +
   geom_node_text(aes(label = name), repel = TRUE, 
                  point.padding = unit(0.2, "lines")) +
   theme_void()
@@ -230,7 +228,12 @@ greenspaces_correlations  %>%
 3.  Write a function that allows you to conduct a keyness analysis to compare two individual EPA reports (hint: that means target and reference need to both be individual reports). Run the function on 3 pairs of reports, generating 3 keyness plots.
 
 ```{r}
+dual_keyness <- function(){
+  
+  
 
+
+}
 ```
 
 
