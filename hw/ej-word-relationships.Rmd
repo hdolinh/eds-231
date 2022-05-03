@@ -82,21 +82,6 @@ words <- tidy_text %>%
   select(-docvar3)
 ```
 
-Here I am creating data objects so I can do analysis.
-
-```{r}
-# # most frequent words across all docs
-# words_freq <- words %>% 
-#   count(year, word, sort = TRUE)
-# 
-# # number of total words by doc per year
-# words_total <- words_freq %>% 
-#   group_by(year) %>% 
-#   summarize(total = sum(n))
-# 
-# # join words_freq and words_total 
-# words_report <- left_join(words_freq, words_total)
-```
 
 ```{r}
 # quanteda word relationship tools
@@ -225,22 +210,76 @@ greenspaces_correlations  %>%
 ```
 
 
-3.  Write a function that allows you to conduct a keyness analysis to compare two individual EPA reports (hint: that means target and reference need to both be individual reports). Run the function on 3 pairs of reports, generating 3 keyness plots.
+\noindent 3. Write a function that allows you to conduct a keyness analysis to compare two individual EPA reports (hint: that means target and reference need to both be individual reports). Run the function on 3 pairs of reports, generating 3 keyness plots.
 
 ```{r}
-dual_keyness <- function(){
+dual_keyness <- function(years, target){
   
+  # read in data
+  files <- list.files(
+    path = here::here("hw/epa_data"),
+    pattern = "pdf$",
+    full.names = TRUE)
   
-
-
+  ej_reports <- lapply(files, pdf_text)
+  
+  # create df of all 6 PDf reports
+  ej_pdf <- readtext(
+    file = files,
+    docvarsfrom = "filenames",
+    docvarnames = c("type", "year"),
+    sep = "_") %>% 
+    filter(docvar3 %in% years)
+  
+  # creating an initial corpus
+  epa_corp <- corpus(x = ej_pdf, text_field = "text")
+  
+  tokens <- tokens(epa_corp, remove_punct = TRUE) %>%
+    tokens_select(min_nchar = 3) %>%
+    tokens_tolower() %>%
+    tokens_remove(pattern = (stop_vec))
+  
+  doc_freq_matrix <- dfm(tokens)
+  
+  keyness <- textstat_keyness(doc_freq_matrix,
+                              target = target) # target refers to document you are comparing to
+  textplot_keyness(keyness)
 }
 ```
 
-
-
-4.  Select a word or multi-word term of interest and identify words related to it using windowing and keyness comparison. To do this you will create to objects: one containing all words occurring within a 10-word window of your term of interest, and the second object containing all other words. Then run a keyness comparison on these objects. Which one is the target, and which the reference? [Hint](https://tutorials.quanteda.io/advanced-operations/target-word-collocations/) 
+```{r}
+dual_keyness(years = c(2015, 2018), target = 1)
+```
 
 ```{r}
+dual_keyness(years = c(2017, 2020), target = 1)
+```
 
+```{r}
+dual_keyness(years = c(2016, 2019), target = 2)
+```
+
+
+\noindent 4.  Select a word or multi-word term of interest and identify words related to it using windowing and keyness comparison. To do this you will create two objects: one containing all words occurring within a 10-word window of your term of interest, and the second object containing all other words. Then run a keyness comparison on these objects. Which one is the target, and which the reference? [Hint](https://tutorials.quanteda.io/advanced-operations/target-word-collocations/) 
+
+**Answer:** The target is the list of words within a 10 word window based on the key terms I've chosen which is "air" and "air quality". The reference is the list of all other words outside of the 10 word window.
+
+```{r}
+air <- c("air", "air quality")
+
+toks_inside <- tokens_keep(tokens_1, pattern = air, window = 10) %>% 
+  tokens_remove(pattern = air) # remove the keywords
+
+toks_outside <- tokens_remove(tokens_1, pattern = air, window = 10)
+```
+
+
+```{r}
+dfmat_inside <- dfm(toks_inside)
+dfmat_outside <- dfm(toks_outside)
+
+tstat_key_inside <- textstat_keyness(rbind(dfmat_inside, dfmat_outside), 
+                                     target = seq_len(ndoc(dfmat_inside)))
+head(tstat_key_inside, 20)
 ```
 
